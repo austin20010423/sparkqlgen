@@ -35,10 +35,11 @@ or `brew install uv`.
 | `/help` | List commands |
 | `/clear` | Reset conversation context |
 | `/exit` (`/quit`) | Leave the REPL |
-| `/model <id>` | Switch OpenAI model (`gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, ...) |
+| `/model <id>` | Switch OpenAI model (`gpt-5.4`, `gpt-4o`, `gpt-4o-mini`) |
 | `/sparql <query>` | Run raw SPARQL, skip the LLM |
 | `/explain` | Have the LLM explain the most recent SPARQL it produced |
 | `/export <file>` | Save last results as `.csv` or `.json` |
+| `/compact` | Manually summarize older conversation to free up context |
 
 ---
 

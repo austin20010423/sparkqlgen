@@ -14,7 +14,6 @@ class SessionState:
     last_rows: list[dict[str, Any]] | None = None
     last_columns: list[str] | None = None
     auto_approve: bool = False
-    lang: str = "en"
     # Numbered choices the agent surfaced in its last clarification turn.
     # The user can pick by typing the index instead of retyping the option.
     pending_choices: list[str] = field(default_factory=list)

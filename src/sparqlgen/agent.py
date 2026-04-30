@@ -13,7 +13,7 @@ from rich.console import Console
 
 from . import hardening
 from .prompts import SYSTEM_PROMPT
-from .providers import Provider, ToolCall
+from .providers import Provider
 from .tools import get_tool
 
 
@@ -90,9 +90,8 @@ def run_agent(
         resp = provider.chat(history, [], SYSTEM_PROMPT)
 
         if not resp.tool_calls:
-            # Final answer (no more tool calls). Belt-and-braces: if the model
-            # tried to answer without ever running SPARQL but it had clearly
-            # resolved a Q-id along the way, push back once and force a query.
+            # Final answer — but if the model never ran SPARQL despite resolving
+            # a Q-id, push it back once to force a real query.
             tools_used = {step["tool"] for step in trace}
             had_qid = bool(tools_used & {"search_entity", "get_entity"})
             never_ran_sparql = "run_sparql" not in tools_used
@@ -105,7 +104,6 @@ def run_agent(
                 )
             )
             if had_qid and never_ran_sparql and not looks_like_clarification:
-                # Force a final SPARQL call. We do this exactly once.
                 history.append({"role": "assistant", "content": text})
                 history.append(
                     {
@@ -113,12 +111,7 @@ def run_agent(
                         "content": (
                             "[system] You answered without calling run_sparql. "
                             "Per the rules, every successful turn must end with a real "
-                            "SPARQL query so the user sees the structured query that "
-                            "produced the answer. Now generate that query and call "
-                            "run_sparql. If the user gave only an entity name, write a "
-                            "key-facts query (label, instance-of, country, population, "
-                            "coords / occupation, birth, death — whichever apply) using "
-                            "OPTIONAL blocks."
+                            "SPARQL query. Generate one and call run_sparql now."
                         ),
                     }
                 )
@@ -133,16 +126,13 @@ def run_agent(
                 tool_trace=trace,
             )
 
-        # Append the assistant turn (with tool_calls) ONCE before dispatching
         provider.append_assistant_msg(history, resp.raw)
 
-        # Dispatch every tool call from this turn
         for tc in resp.tool_calls:
             tool = get_tool(tc.name)
             if tool is None:
                 result = {"error": f"unknown tool: {tc.name}"}
             else:
-                # Permission gate for run_sparql only
                 if tc.name == "run_sparql" and permission_check is not None:
                     query = tc.arguments.get("query", "")
                     if not permission_check(query):
@@ -158,7 +148,6 @@ def run_agent(
                     except Exception as e:
                         result = {"error": str(e)}
 
-            # Capture the most recent successful SPARQL run
             if tc.name == "run_sparql":
                 last_sparql = tc.arguments.get("query")
                 if isinstance(result, dict) and result.get("ok"):

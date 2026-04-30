@@ -21,7 +21,8 @@ BANNER = r"""
 def show_banner(console: Console, model_name: str) -> None:
     console.print(BANNER, style="cyan")
     console.print(
-        f"  model: [bold]{model_name}[/]    type [bold]/help[/] for commands, [bold]/exit[/] to quit\n"
+        f"  model: [bold]{model_name}[/]    "
+        f"type [bold]/help[/] for commands, [bold]/exit[/] to quit\n"
     )
 
 

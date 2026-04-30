@@ -22,8 +22,6 @@ class Settings(BaseSettings):
 
     history_file: Path = HOME_DIR / "history"
     cache_db: Path = HOME_DIR / "cache.sqlite"
-    sessions_dir: Path = HOME_DIR / "sessions"
 
 
 settings = Settings()
-settings.sessions_dir.mkdir(parents=True, exist_ok=True)
