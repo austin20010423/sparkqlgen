@@ -13,3 +13,4 @@ build/
 *.sqlite-journal
 ~/.sparqlgen/
 uv.lock
+instructions.pdf
