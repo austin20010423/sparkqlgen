@@ -55,11 +55,22 @@ Failure-type tags:
 
 ## E. Multi-hop / nested (`semantic-wrong`)
 
-| # | Input | Risk |
-|---|---|---|
-| E1 | `Cities where Nobel physics laureates were born and the country won the World Cup` | LLM may collapse the join, miss the country bridge |
-| E2 | `Authors who wrote books that won a Pulitzer and were later adapted into films directed by Oscar winners` | 4-hop; risk of property hallucination |
-| E3 | `Universities founded before 1500 still operating in 2025 with > 10000 students` | Combining historical + current properties |
+| # | Input | Risk | Result by model |
+|---|---|---|---|
+| E1 | `Cities where Nobel physics laureates were born and the country won the World Cup` | LLM may collapse the join, miss the country bridge | ✅ gpt-5.4 / ❌ gpt-4o / ❌ gpt-4o-mini |
+| E2 | `Authors who wrote books that won a Pulitzer and were later adapted into films directed by Oscar winners` | 4-hop; risk of property hallucination | ✅ gpt-5.4 / ❌ gpt-4o / ❌ gpt-4o-mini |
+| E3 | `Universities founded before 1500 still operating in 2025 with > 10000 students` | Combining historical + current properties | ✅ gpt-5.4 / ❌ gpt-4o / ❌ gpt-4o-mini |
+
+**Status after Phase-3 hardening:** Type E is the *only* category that still fails,
+and it fails *only* on the GPT-4 series (`gpt-4o`, `gpt-4o-mini`). On `gpt-5.4`
+all three cases pass. Failure mode is consistent: the GPT-4 models collapse
+the join (drop the bridging `?country` / `?film` variable), or hallucinate a
+shortcut property path that elides one hop. The query is syntactically valid
+and runs — it just answers a different question. None of our deterministic
+guards (`assert_safe`, `auto_limit`, `detect_conflict`, syntax validation,
+empty-result quality warning) can catch a semantically-wrong-but-plausible
+join, because by definition it parses and returns rows. See README §
+*Failure cases that remain (and why)* for the technical analysis.
 
 ## F. Aggregation (`semantic-wrong`)
 
@@ -124,3 +135,7 @@ Failure-type tags:
 
 20+ adversarial cases across 12 categories. Each has a specific
 hardening target in Phase 3 (see `../TODO_Part1.md` Phase 3.1–3.10).
+
+After Phase-3 hardening + `gpt-5.4`, all categories pass. With `gpt-4o`
+and `gpt-4o-mini`, only **type E (multi-hop / nested joins)** still fails;
+all other categories (A–D, F–L) pass on every model we evaluated.

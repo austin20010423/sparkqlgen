@@ -8,22 +8,44 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 
-BANNER = r"""
-  ____                       _  ___
- / ___| _ __  __ _ _ __ __ _| |/ _ \  ___ _ __
- \___ \| '_ \/ _` | '__/ _` | | | | |/ _ \ '_ \
-  ___) | |_) \__,_| | | \___| | |_| |  __/ | | |
- |____/| .__/\____|_|  \___\_|_|\___/ \___|_| |_|
-       |_|     Wikidata NL -> SPARQL agent
-"""
+BANNER_LINES = [
+    r"  ____                       _  ___",
+    r" / ___| _ __  __ _ _ __ __ _| |/ _ \  ___ _ __",
+    r" \___ \| '_ \/ _` | '__/ _` | | | | |/ _ \ '_ \ ",
+    r"  ___) | |_) \__,_| | | \___| | |_| |  __/ | | |",
+    r" |____/| .__/\____|_|  \___\_|_|\___/ \___|_| |_|",
+    r"       |_|     Wikidata NL -> SPARQL agent",
+]
 
 
 def show_banner(console: Console, model_name: str) -> None:
-    console.print(BANNER, style="cyan")
-    console.print(
-        f"  model: [bold]{model_name}[/]    "
-        f"type [bold]/help[/] for commands, [bold]/exit[/] to quit\n"
+    width = console.size.width
+    block_width = max(len(line) for line in BANNER_LINES)
+    block_pad = " " * max(0, (width - block_width) // 2)
+    console.print()
+    for line in BANNER_LINES:
+        console.print(block_pad + line, style="cyan", highlight=False)
+
+    tagline = (
+        f"model: [bold]{model_name}[/]    "
+        f"type [bold]/help[/] for commands, [bold]/exit[/] to quit"
     )
+    plain_len = len(f"model: {model_name}    type /help for commands, /exit to quit")
+    tag_pad = " " * max(0, (width - plain_len) // 2)
+    console.print()
+    console.print(tag_pad + tagline)
+
+    description_lines = [
+        "Ask Wikidata in plain English (or 中文 / 日本語 / Español).",
+        "I plan a SPARQL query via tool-use, run it, and show the rows.",
+        "Try: \"Top 5 cities in Japan by population\"  or  \"/help\".",
+    ]
+    desc_width = max(len(line) for line in description_lines)
+    desc_pad = " " * max(0, (width - desc_width) // 2)
+    console.print()
+    for line in description_lines:
+        console.print(desc_pad + line, style="dim", highlight=False)
+    console.print()
 
 
 def render_sparql(console: Console, query: str) -> None:
