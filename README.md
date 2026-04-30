@@ -4,8 +4,6 @@
 plans a Wikidata SPARQL query through a tool-use loop (entity search →
 property search → query → execute), and returns results.
 
-> Built for the GoFeight take-home challenge — Part 1.
-
 ---
 
 ## Quick start
