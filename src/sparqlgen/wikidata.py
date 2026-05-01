@@ -193,6 +193,10 @@ def run_sparql(query: str, timeout_s: int = 60) -> dict[str, Any]:
     """
     from . import hardening
 
+    # Strip markdown fences and fix obvious cosmetic issues from LLM output
+    # before any structural check runs.
+    query = hardening.normalize_sparql(query)
+
     try:
         hardening.assert_safe(query)
     except hardening.QueryError as e:
@@ -201,6 +205,12 @@ def run_sparql(query: str, timeout_s: int = 60) -> dict[str, Any]:
     err = hardening.basic_sparql_validate(query)
     if err:
         return {"ok": False, "error": f"syntax: {err}", "rows": [], "columns": []}
+
+    # Static structural check: aggregate without GROUP BY is the single most
+    # common SPARQL syntax bug per the FIRESPARQL paper. Report it as a
+    # quality_warning so the agent self-repairs through the existing
+    # aggregation_quality skill instead of waiting for endpoint rejection.
+    agg_warning = hardening.check_aggregation_grouping(query)
 
     query = hardening.auto_limit(query, default=100)
 
@@ -231,7 +241,11 @@ def run_sparql(query: str, timeout_s: int = 60) -> dict[str, Any]:
                 "rows": rows,
                 "elapsed_s": round(elapsed, 3),
             }
-            if warning:
+            # Prefer the structural aggregation warning — it tells the agent
+            # exactly what to fix. Fall back to result-quality warning.
+            if agg_warning:
+                out["quality_warning"] = agg_warning
+            elif warning:
                 out["quality_warning"] = warning
             return out
         except Exception as e:  # broad: SPARQLWrapper raises many flavors

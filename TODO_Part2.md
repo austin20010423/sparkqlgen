@@ -14,6 +14,7 @@
 - [ ] **3. Execution & Iteration**
   - Run evaluation pipeline using **at least 3 different models**
   - Must be a mix of **open-weight AND closed-source** models
+    for open weights i'll like to use Llama4 model in ollama and i'll like to run on macos m4 macbook air, please change gpt-4-mini to Llama4 in ollama that can run on macbook air m4 16g 
 
 - [ ] **4. The Threshold**
   - Iterate on prompts and pipeline until **ALL** chosen models hit **>85% accuracy** against the manually labeled set

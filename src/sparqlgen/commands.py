@@ -25,7 +25,7 @@ _HELP: list[HelpEntry] = [
     ("/help", "Show this help."),
     ("/clear", "Reset conversation context (keeps you in the session)."),
     ("/exit, /quit", "Leave the REPL."),
-    ("/model <id>", "Switch OpenAI model (gpt-5.4, gpt-4o, gpt-4o-mini)."),
+    ("/model <id>", "Switch OpenAI model (gpt-5.4, gpt-5.4-mini, gpt-4o-mini)."),
     ("/sparql <query>", "Run a raw SPARQL query, skipping the LLM."),
     ("/explain", "Ask the LLM to explain the most recent SPARQL it produced."),
     ("/export <file>", "Save the most recent results to .csv or .json."),

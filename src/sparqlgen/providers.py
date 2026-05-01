@@ -54,10 +54,18 @@ class Provider:
 class OpenAIProvider(Provider):
     name = "openai"
 
-    def __init__(self, model_id: str = "gpt-4o"):
+    def __init__(
+        self,
+        model_id: str = "gpt-5.4-mini",
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ):
         from openai import OpenAI
         self.model_id = model_id
-        self.client = OpenAI(api_key=settings.openai_api_key)
+        self.client = OpenAI(
+            api_key=api_key or settings.openai_api_key,
+            base_url=base_url,
+        )
 
     def chat(self, messages, tools, system):
         from .tools import to_openai_schema
@@ -109,14 +117,27 @@ class OpenAIProvider(Provider):
         )
 
 
-# Whitelist of allowed OpenAI models — /model and --model reject anything else.
-ALLOWED_MODELS = ["gpt-5.4", "gpt-4o", "gpt-4o-mini"]
+# Whitelist of allowed models. OpenAI GPT series go to api.openai.com.
+# Anything prefixed `llama-` or `local/` is routed to a local Ollama server.
+OPENAI_MODELS = ["gpt-5.4", "gpt-5.4-mini", "gpt-4o-mini"]
+LOCAL_MODELS = ["llama3.1:8b"]
+ALLOWED_MODELS = OPENAI_MODELS + LOCAL_MODELS
+
+
+def _is_local(model_id: str) -> bool:
+    return model_id in LOCAL_MODELS
 
 
 def make_provider(model_id: str) -> Provider:
     if model_id not in ALLOWED_MODELS:
         raise ValueError(
             f"model {model_id!r} not allowed. Pick one of: {', '.join(ALLOWED_MODELS)}"
+        )
+    if _is_local(model_id):
+        return OpenAIProvider(
+            model_id=model_id,
+            api_key=settings.ollama_api_key,
+            base_url=settings.ollama_base_url,
         )
     return OpenAIProvider(model_id=model_id)
 
