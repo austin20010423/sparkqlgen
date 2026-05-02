@@ -185,7 +185,7 @@ rendering.py── rich.Table / Panel → terminal
 
 ---
 
-## Break It — failure modes catalogued
+## Failure modes catalogued
 
 Full break-it catalog with example triggers and hardening responses is in [`docs/failures.md`](docs/failures.md) — 20+ adversarial cases across ambiguous entities, conflicting constraints, typos, multilingual input, multi-hop joins, fictional entities, temporal qualifiers, open-world negation, prompt injection, pathological size, engine errors, ambiguous Q-id senses, implicit geo narrowing, and aggregation/GROUP BY mismatches.
 
@@ -281,15 +281,6 @@ All three above 85% — **threshold met**.
 
 See `evals/results/summary.md` for the per-case breakdown.
 
-## Performance comparison — what each model got initially wrong
-
-### Cross-model consistency
-
-The most striking finding: **after iteration, all three models converge on the same correct answer for 27+ of 30 cases**. This means:
-- The skills are general enough that all three follow them
-- The backstops carry the cases where the model's own judgment isn't enough
-- The 1-3 failures per model are **specific model weaknesses**, not systemic gaps
-
 ## Learnings — eval design and ground truth for structured outputs
 
 1. **Result-set value comparison > SPARQL string comparison.**  
@@ -310,17 +301,5 @@ The most striking finding: **after iteration, all three models converge on the s
 6. **Adversarial-by-design test cases need adversarial-by-design failure analysis.**  
    When all 3 models fail the same case the same way, it's a gt or framing issue. When 1 model fails uniquely, it's a model-capability issue. The diagnostic split saved us many wasted prompt iterations.
 
-7. **Rate-limit handling is part of the eval pipeline, not orthogonal.**  
-   Groq free tier (8000 TPM for `openai/gpt-oss-120b`) is below a single multi-tool-call case's token cost (~15-25K). Without `RateLimitError` retry-with-backoff in `OpenAIProvider.chat`, the eval would cascade-fail after case ~7. Open-weight provider integration needs the same robustness as closed-source.
-
-8. **Modular prompt-skill systems compose better than monolithic prompts.**  
-   The original system prompt was ~10 kB and got re-sent every turn (×3-5 turns × 30 cases = a lot of redundant tokens). Refactoring into `core.md` + 14 on-demand `*.md` skill files cut average per-turn system-prompt size to ~3 kB and made content edits a one-line markdown change. Skills are also independently testable — each has trigger and content tests.
-
-9. **Three-layer hardening (interceptor / skill / backstop) is the minimum viable.**  
-   - Interceptor catches inputs that should never reach the LLM (conflict, fictional, no-context coreference) — saves tokens and gives clear messages.
-   - Skill teaches the LLM domain-specific patterns when triggers fire.
-   - Backstop fixes the LLM's output when guidance failed.  
-   Removing any layer regresses a meaningful subset of cases; all three reinforce each other.
-
-10. **Evaluation iterations need fast feedback.**  
-    The 30-case eval takes 5-15 minutes per model. Per-case `--case S4` and per-type `--types simple,typo` flags in `run.py` cut debug cycles to seconds. Incremental persistence after each model's full pass means a crash mid-eval doesn't lose finished models' results.
+7. **Modular prompt-skill systems compose better than monolithic prompts.**  
+   The original system prompt was ~10 kB and got re-sent every turn (×3-5 turns × 30 cases = a lot of redundant tokens). Refactoring into `core.md` + 14 on-demand `*.md` skill files cut average per-turn system-prompt size to ~3 kB and made content edits a one-line markdown change.

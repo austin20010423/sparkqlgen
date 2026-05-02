@@ -1,4 +1,4 @@
-# Phase 2 — Break-It Test Cases
+# Test Cases
 
 Adversarial inputs designed to surface bugs in the NL → SPARQL pipeline.
 Each case lists the input, the failure mode, the *expected correct* behavior,
