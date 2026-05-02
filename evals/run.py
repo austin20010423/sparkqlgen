@@ -7,7 +7,7 @@ and writes per-model JSON + a markdown summary table.
 
 Usage:
     uv run python evals/run.py                       # default model lineup
-    uv run python evals/run.py --models gpt-5.4-mini,llama3.1:8b
+    uv run python evals/run.py --models gpt-5.4-mini,gpt-4o-mini
     uv run python evals/run.py --case S1             # single case
     uv run python evals/run.py --limit 5             # first N cases
 """

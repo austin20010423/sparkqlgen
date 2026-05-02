@@ -117,27 +117,15 @@ class OpenAIProvider(Provider):
         )
 
 
-# Whitelist of allowed models. OpenAI GPT series go to api.openai.com.
-# Anything prefixed `llama-` or `local/` is routed to a local Ollama server.
+# Whitelist of allowed models. All routed to api.openai.com.
 OPENAI_MODELS = ["gpt-5.4", "gpt-5.4-mini", "gpt-4o-mini"]
-LOCAL_MODELS = ["llama3.1:8b"]
-ALLOWED_MODELS = OPENAI_MODELS + LOCAL_MODELS
-
-
-def _is_local(model_id: str) -> bool:
-    return model_id in LOCAL_MODELS
+ALLOWED_MODELS = OPENAI_MODELS
 
 
 def make_provider(model_id: str) -> Provider:
     if model_id not in ALLOWED_MODELS:
         raise ValueError(
             f"model {model_id!r} not allowed. Pick one of: {', '.join(ALLOWED_MODELS)}"
-        )
-    if _is_local(model_id):
-        return OpenAIProvider(
-            model_id=model_id,
-            api_key=settings.ollama_api_key,
-            base_url=settings.ollama_base_url,
         )
     return OpenAIProvider(model_id=model_id)
 
