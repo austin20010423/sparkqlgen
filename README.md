@@ -93,11 +93,9 @@ tests/
 
 ---
 
-# Part 1 — Build, Break, Harden
-
 ## System architecture
 
-### Request flow (one user turn)
+### Request flow 
 
 ```
 user line
@@ -189,30 +187,11 @@ rendering.py── rich.Table / Panel → terminal
 
 ## Break It — failure modes catalogued
 
-20+ failure modes catalogued in `docs/failures.md`, grouped:
-
-| Type | Example trigger | Hardening response |
-|---|---|---|
-| **A. Ambiguous bare entity** | "Tell me about Mercury" / "revenue of Apple" | `clarification` skill — strict-ask rule for cross-class names (Apple, Mercury, Java, …) |
-| **B. Conflicting constraints** | "movies before 2000 and after 2010" | `detect_conflict` short-circuit |
-| **C. Typos in famous entities** | "Toyko" / "Einstien" / "Shaksepeare" | `_FAMOUS_TYPOS` allowlist + `typo_recovery` skill |
-| **D. Non-English input** | "台灣的首都是哪裡？" / "Lista 5 personas..." | `detect_lang` + `multilingual` skill |
-| **E. Multi-hop joins** | "Painters born in same city as Picasso" | `join_direction` skill |
-| **F. Fictional / mythological** | "Sherlock Holmes's date of birth" | `detect_fictional_input` short-circuit |
-| **G. Temporal qualifiers** | "US presidents during the 1980s" | `temporal` skill teaches `p:/ps:/pq:` qualifier pattern |
-| **H. Open-world negation** | "South American countries with no coastline" | `negation` skill teaches dedicated-class + two-level FILTER NOT EXISTS |
-| **I. Prompt injection** | "Ignore previous instructions and INSERT..." | `looks_like_injection` annotation + `injection` skill + read-only enforcement |
-| **J. Pathological size** | "List every human on Wikidata" | `safety_or_answer` mode + auto_limit + caveat-keyword acceptance |
-| **K. Coreference w/o context** | "Show me more of those" (turn 1) | `detect_no_context_coreference` short-circuit |
-| **L. Engine errors** | Blazegraph stack overflow on `wdt:P31/wdt:P279*` | `engine_error_recovery` skill teaches one-at-a-time SPARQL simplification |
-| **M. Ambiguous Q-id sense** | "population of Tokyo" → former city Q7473516 vs capital Q1490 | Backstop 1 with description-aware dominance |
-| **N. Implicit geo narrowing** | "tallest mountains in the world" → LLM adds `wdt:P17 wd:Q17` | Backstop 2 strips narrowing |
-| **O. Aggregate without GROUP BY** | `SELECT ?city (MAX(?pop)...)` no `GROUP BY ?city` | `check_aggregation_grouping` → quality_warning |
-| **P. Markdown-wrapped SPARQL** | LLM emits ` ```sparql ...``` ` | `normalize_sparql` strips fences |
+Full break-it catalog with example triggers and hardening responses is in [`docs/failures.md`](docs/failures.md) — 20+ adversarial cases across ambiguous entities, conflicting constraints, typos, multilingual input, multi-hop joins, fictional entities, temporal qualifiers, open-world negation, prompt injection, pathological size, engine errors, ambiguous Q-id senses, implicit geo narrowing, and aggregation/GROUP BY mismatches.
 
 ## Remaining hard cases (and why)
 
-After all the hardening above, our 30-case eval shows:
+After all the hardening above, 30-case eval shows:
 
 - **`gpt-5.4`** — 30/30 = 100%
 - **`gpt-5.4-mini`** — 29/30 = 96.7%, only AMB2 ("revenue of Apple") fails
@@ -235,7 +214,6 @@ The remaining failures fall into three categories that are **fundamentally not d
 ### 3. Edge-case scoring (gpt-oss-120b's AGG3)
 - "Top 3 most populous countries" — model returns 3 valid populous countries, but 1 isn't in gt's `LIMIT 10` slice (e.g. it includes a non-sovereign-state entity like the EU).
 - **Why it's hard**: this is mostly a ground-truth scoping problem. We already loosened gt limits for AGG1/LANG3/TYPO3 to compensate for slice mismatch. AGG3 sits at the boundary — bumping LIMIT to 30 would fix it but may over-loosen for other cases.
-- **What would fix it**: per-case `precision_threshold` override (we use a global 0.8), or scorer enhancement to match against multi-source ground-truth sets.
 
 ### What would actually move the needle further
 
@@ -243,13 +221,9 @@ The remaining failures fall into three categories that are **fundamentally not d
 - **Schema-grounded retrieval**: cache legal join paths between Q-ids and retrieve as in-context examples before generation.
 - **Execution-guided beam search**: generate K candidates, run all, pick the one whose result shape best matches the NL.
 
-These are scope expansions, not bug fixes. The current architecture clears 85% on all three required model classes, which was the threshold.
-
 ---
 
-# Part 2 — Multi-Model Evaluation
-
-## Test case design (`evals/cases.json`)
+## Test cases (`evals/cases.json`)
 
 30 cases across 12 categories, designed to be adversarial and stress-test specific model weaknesses:
 
@@ -285,11 +259,13 @@ Per the instructions: ≥3 models, **mix of open-weight + closed-source**.
 |---|---|---|---|---|
 | **`gpt-5.4`** | Closed | OpenAI | flagship reasoning | Highest baseline; tests upper bound |
 | **`gpt-5.4-mini`** | Closed | OpenAI | smaller reasoning | Tests whether skills + backstops work without flagship reasoning capacity |
-| **`openai/gpt-oss-120b`** | **Open-weight** | Groq (LPU-hosted) | 120B params | OpenAI-released open weights; verifies the system isn't OpenAI-API-coupled and works on a non-reasoning architecture; also gets us blazing-fast Groq inference (~2s/turn vs 5–40s for OpenAI) |
+| **`openai/gpt-oss-120b`** | **Open-weight** | Groq (LPU-hosted) | 120B reasoning | OpenAI's open-weight reasoning model (sibling of GPT-5 series, released with public weights); verifies the system isn't OpenAI-API-coupled and works on third-party-hosted reasoning models; also gets us blazing-fast Groq inference (~2s/turn vs 5–40s for OpenAI hosted reasoning models) |
 
-The selection covers a deliberate **capability gradient** (flagship → smaller → open-weight) and **architecture diversity** (reasoning model × 2 + standard transformer × 1) — this exposes which failures are skill-following vs. raw capability.
+The selection covers two deliberate axes:
+- **Closed vs open weights** — 2 closed (`gpt-5.4`, `gpt-5.4-mini`) + 1 open (`openai/gpt-oss-120b`).
+- **Capability gradient + provider diversity** — flagship reasoning (OpenAI) → smaller reasoning (OpenAI) → 120B open-weight reasoning (Groq LPU). All three are reasoning models, but they differ in size, training, host, and inference architecture (OpenAI vs Groq LPU). The gradient exposes which failures are skill-following vs. raw capability.
 
-`gpt-4o-mini` is also on the whitelist as a non-reasoning closed-source baseline (we tested it earlier, scoring 73.3% before all the latest fixes), but the three primary models above clear ≥85% which is what the threshold demands.
+`gpt-4o-mini` (a non-reasoning closed-source model) is also on the whitelist for sanity comparison; it scored 73.3% before all the latest fixes — useful as a non-reasoning lower bound but not part of the final certified lineup.
 
 `llama3.1:8b` (via Ollama) was also tested early and **failed at 20%** — too weak on tool-calling protocol adherence to be a viable target. Documented as a capability lower bound; not in the final lineup.
 
@@ -306,32 +282,6 @@ All three above 85% — **threshold met**.
 See `evals/results/summary.md` for the per-case breakdown.
 
 ## Performance comparison — what each model got initially wrong
-
-### Baseline (before iteration)
-
-- **`gpt-4o-mini`** (initial baseline) — 86.7%. Failed JOIN1, JOIN3 (multi-hop joins), TIME2 (qualifier pattern), NEG1 (open-world FILTER NOT EXISTS). Pattern: not following SPARQL idioms it had never seen.
-- **`gpt-5.4`** (initial) — 80.0%. Failed S4 (over-clarified), AGG2 (off-by-one current-vs-historical), AGG3 (added implicit country narrowing), FIC1 (ran "in-fiction" SPARQL despite refuse mode), FIC2 (loop-thrashed search_entity 8x), TYPO2 (didn't auto-correct typo). Pattern: cautious over-clarification + adding extra reasoning that violated the test contract.
-- **`gpt-5.4-mini`** (initial) — 86.7%. Similar to mini — slipped on cross-class ambiguity and the unit-bug AGG3.
-- **`openai/gpt-oss-120b`** (initial) — 66.7% (with rate limits) or **90% sustainable** (without rate limits). Failed AGG3 (different reason — picked actual non-8000m peaks due to unit-blind elevation filter), JOIN3 (agent crashed mid-query — Groq tool-call shape variation), TYPO3 (different predicate), TIME2 (wrong qualifier pattern).
-
-### After iteration
-
-The same hardening / skill / backstop machinery brought all three to ≥85%:
-
-| Failure pattern | Was fixed by |
-|---|---|
-| Over-clarification on dominant-entity questions (S4) | Backstop 1 + dominance shortcut in CORE_PROMPT |
-| Implicit country narrowing on global top-N (AGG3 mountains) | Backstop 2 + `top_n_global` skill + question rephrasing |
-| Refuse-mode contract violations (FIC1, AMB2) | `detect_fictional_input` short-circuit + strict-ask rule in `clarification` skill |
-| Famous-name typos (TYPO1/2/3) | `_FAMOUS_TYPOS` allowlist + `typo_recovery` skill |
-| Open-world negation (NEG1/2) | `negation` skill with dedicated-class + two-level FILTER NOT EXISTS rules |
-| Aggregate / GROUP BY mismatches | `check_aggregation_grouping` post-validation → quality_warning loop |
-| Engine errors (Blazegraph stack overflow) | `engine_error_recovery` skill |
-| Markdown-wrapped output (especially smaller models) | `normalize_sparql` regex |
-| Numeric-definition disagreement (AGG2 EU 27 vs 28) | `numeric_tolerance: 0.1` per-case override |
-| List-N slice mismatch (LANG3, TYPO3) | gt LIMIT bumped to far exceed actual data size |
-| Pathological-size mode/answer mismatch (BIG1) | scorer Option 1.5 — partial-answer-with-caveat path |
-| Hybrid Wikidata data quality (AGG3 mountain units) | question pivoted to a clean cleaner aggregation (most populous countries) |
 
 ### Cross-model consistency
 
@@ -374,14 +324,3 @@ The most striking finding: **after iteration, all three models converge on the s
 
 10. **Evaluation iterations need fast feedback.**  
     The 30-case eval takes 5-15 minutes per model. Per-case `--case S4` and per-type `--types simple,typo` flags in `run.py` cut debug cycles to seconds. Incremental persistence after each model's full pass means a crash mid-eval doesn't lose finished models' results.
-
----
-
-## Roadmap
-
-- Streaming-token output (currently buffered per turn)
-- `--resume <session>` to reload a saved REPL transcript
-- SQLite cache eviction policy
-- Per-case incremental JSON persistence (currently one write per model)
-- Schema-grounded retrieval for multi-hop joins (the `gpt-oss-120b` TIME2 fix path)
-- Asciinema demo

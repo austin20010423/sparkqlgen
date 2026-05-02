@@ -14,6 +14,8 @@ Failure-type tags:
 - `unsafe-query` — write op or injection attempt
 - `context-loss` — multi-turn reference resolved wrong
 - `lang` — failure specific to non-English input
+- `engine-error` — Blazegraph stack overflow / 5xx on expensive queries
+- `output-cosmetic` — model wraps SPARQL in markdown / drops spaces / minor format drift
 
 ---
 
@@ -129,13 +131,69 @@ join, because by definition it parses and returns rows. See README §
 | L2 | `All instances of Q35120 (entity)` | Q35120 is the root — pathological |
 | L3 | `Every book ever published` | Same |
 
+## M. Ambiguous Q-id sense (`entity-link`)
+
+| # | Input | Risk | Hardening |
+|---|---|---|---|
+| M1 | `population of Tokyo` | Wikidata search ranks former-city Q7473516 above capital Q1490 → wrong population returned | Backstop 1 (`detect_dominant_entity`) — pre-resolves Q-id with description filter (skip "former / historical / ward / district") + domain-cue ↔ class match (population → city/town/country) |
+| M2 | `capital of France` (uncapitalized) | Less ambiguity but same pattern — search may return historical-French-state Q-id first | Same backstop, fallback to raw top hit if nothing matches cue class |
+| M3 | `When was Einstein born` | Multiple Einsteins exist; we want Albert (Q937) | Backstop 1 picks the canonical match by domain cue (born → person class) |
+
+## N. Implicit geo narrowing (`semantic-wrong`)
+
+| # | Input | Risk | Hardening |
+|---|---|---|---|
+| N1 | `tallest mountains in the world` | LLM adds `?m wdt:P17 wd:Q17` (Japan) or `VALUES ?country { wd:Q837 wd:Q38 }` (Nepal + Italy) without being asked → answer is regionally narrowed | Backstop 2 (`strip_implicit_geo_filters`) detects `_GLOBAL_CUE` (world / globally / on earth) or absence of `in <region>` qualifier, then strips P17/P30 triples and `VALUES ?country { ... }` blocks before run_sparql executes |
+| N2 | `most populous cities` (no location) | Same — LLM picks a country at random | Same backstop |
+| N3 | `oldest universities globally` | Same | Same backstop |
+
+## O. Aggregate without GROUP BY (`syntax-error` / `semantic-wrong`)
+
+| # | Input shape (LLM emits) | Risk | Hardening |
+|---|---|---|---|
+| O1 | `SELECT ?city (MAX(?pop) AS ?value) WHERE { ... } LIMIT 5` (no GROUP BY) | Most endpoints reject as syntax error; some return a Cartesian product | `hardening.check_aggregation_grouping` flags aggregate + non-aggregated SELECT vars + missing/incomplete GROUP BY → returns `quality_warning` so the agent self-repairs through `aggregation_quality` skill |
+| O2 | `SELECT ?city ?country (COUNT(?p) AS ?n) GROUP BY ?city` (only ?city in GROUP BY) | Same problem — ?country isn't grouped | Same check, lists which vars are missing |
+| O3 | `SELECT (COUNT(*) AS ?n) WHERE { ... }` (pure aggregate) | Valid — no plain vars in SELECT | Check correctly skips this case |
+
+## P. Output cosmetic drift (`output-cosmetic`)
+
+| # | Output (LLM emits) | Risk | Hardening |
+|---|---|---|---|
+| P1 | ` ```sparql\nSELECT ?x ...\n``` ` | Markdown fences cause `assert_safe` / `basic_sparql_validate` to reject before query reaches endpoint | `normalize_sparql` strips fences (sparql / sql / turtle / plain) before any other check |
+| P2 | `SELECT ?x?y WHERE { ?xwdt:P17 wd:Q142 }LIMIT 5` | Missing spaces between identifiers; some endpoints reject | `normalize_sparql` regex inserts spaces between adjacent variables, between variable and SPARQL keyword (LIMIT/ORDER BY/etc.), between brace and keyword |
+| P3 | `SELECT ?x WHERE { ... } LIMIT 100 SERVICE wikibase:label { ... }` | SERVICE clause after LIMIT is invalid SPARQL | core_prompt rule + skill — model rewrites on retry; structural normalization not attempted (would be invasive) |
+
+## Q. Engine errors (`engine-error`)
+
+| # | Trigger | Risk | Hardening |
+|---|---|---|---|
+| Q1 | `?m wdt:P31/wdt:P279* wd:Q8502 . ?m wdt:P2044 ?elev . ORDER BY DESC(?elev)` (top-N global mountains) | Property-path expansion across all subclasses → `java.lang.StackOverflowError` from Blazegraph | `engine_error_recovery` skill — teaches the agent to swap `wdt:P31/wdt:P279*` for direct `wdt:P31`, drop OPTIONAL blocks, remove SERVICE label, lower LIMIT, replace MAX/GROUP BY with ORDER BY DESC + duplicates |
+| Q2 | Aggregate over `wdt:P31 wd:Q5` (humans) | Endpoint timeout | Same skill + `auto_limit` adds LIMIT 100 default |
+| Q3 | `VALUES ?x { wd:Q1 wd:Q2 ... wd:Q500 }` (huge values block) | Stack-overflow on enumeration | Skill teaches splitting into multiple smaller queries |
+
 ---
 
 ## Summary count
 
-20+ adversarial cases across 12 categories. Each has a specific
-hardening target in Phase 3 (see `../TODO_Part1.md` Phase 3.1–3.10).
+30+ adversarial cases across 17 categories. Each has a specific
+hardening target — see source files:
 
-After Phase-3 hardening + `gpt-5.4`, all categories pass. With `gpt-4o`
-and `gpt-4o-mini`, only **type E (multi-hop / nested joins)** still fails;
-all other categories (A–D, F–L) pass on every model we evaluated.
+- **Interceptor chain** (deterministic short-circuit / annotation): `src/sparqlgen/hardening.py`
+- **Modular prompt skills** (loaded on-demand by trigger): `src/sparqlgen/skills/*.md`
+- **Backstop 1** (entity pre-resolution): `hardening.detect_dominant_entity`
+- **Backstop 2** (SPARQL post-rewrite): `hardening.strip_implicit_geo_filters`
+- **SPARQL pre-execution checks**: `hardening.normalize_sparql`, `assert_safe`, `basic_sparql_validate`, `check_aggregation_grouping`, `auto_limit`
+- **SPARQL post-execution feedback**: `hardening.detect_quality_issue` → `quality_warning` returned to agent
+
+After all hardening on the 3 models in our final evaluation:
+
+| Model | Type | Pass / Total | Categories that still fail |
+|---|---|---|---|
+| `gpt-5.4` | Closed reasoning (flagship) | 30 / 30 | None |
+| `gpt-5.4-mini` | Closed reasoning (smaller) | 29 / 30 | A2 — strict-ask judgment on cross-class names slightly weaker than 5.4 |
+| `openai/gpt-oss-120b` | Open-weight (Groq-hosted) | 27 / 30 | G2/G3 — qualifier pattern drift on advanced temporal joins, and edge-case scoring on AGG3 |
+
+All three clear the ≥85% threshold. See `evals/results/summary.md` for the
+full per-case breakdown and `../README.md § Remaining hard cases` for the
+technical analysis of why the remaining failures are not deterministic-guard
+problems.
