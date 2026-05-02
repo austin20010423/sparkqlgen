@@ -68,16 +68,37 @@ class OpenAIProvider(Provider):
         )
 
     def chat(self, messages, tools, system):
+        import time as _time
+        from openai import RateLimitError
         from .tools import to_openai_schema
         oa_messages = [{"role": "system", "content": system}] + [
             {k: v for k, v in m.items() if not k.startswith("_")} for m in messages
         ]
-        resp = self.client.chat.completions.create(
-            model=self.model_id,
-            messages=oa_messages,
-            tools=to_openai_schema(),
-            tool_choice="auto",
-        )
+        # Honour the provider's `Retry-After` header on 429s. Groq's free tier
+        # caps RPM/TPM and rejects bursts mid-eval; backoff lets a long run
+        # finish instead of dropping every case after the cap is hit.
+        attempts = 0
+        while True:
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.model_id,
+                    messages=oa_messages,
+                    tools=to_openai_schema(),
+                    tool_choice="auto",
+                )
+                break
+            except RateLimitError as e:
+                attempts += 1
+                if attempts > 5:
+                    raise
+                wait = 5
+                hdrs = getattr(getattr(e, "response", None), "headers", None)
+                if hdrs:
+                    try:
+                        wait = max(wait, int(float(hdrs.get("retry-after", 5))))
+                    except (TypeError, ValueError):
+                        pass
+                _time.sleep(min(wait, 60))
         msg = resp.choices[0].message
         tcs: list[ToolCall] = []
         for tc in (msg.tool_calls or []):
@@ -117,15 +138,32 @@ class OpenAIProvider(Provider):
         )
 
 
-# Whitelist of allowed models. All routed to api.openai.com.
+# Whitelist of allowed models.
+# OpenAI proper goes to api.openai.com. Groq-hosted open-weight models go to
+# api.groq.com via Groq's OpenAI-compatible endpoint.
 OPENAI_MODELS = ["gpt-5.4", "gpt-5.4-mini", "gpt-4o-mini"]
-ALLOWED_MODELS = OPENAI_MODELS
+GROQ_MODELS = ["openai/gpt-oss-120b"]
+ALLOWED_MODELS = OPENAI_MODELS + GROQ_MODELS
+
+
+def _is_groq(model_id: str) -> bool:
+    return model_id in GROQ_MODELS
 
 
 def make_provider(model_id: str) -> Provider:
     if model_id not in ALLOWED_MODELS:
         raise ValueError(
             f"model {model_id!r} not allowed. Pick one of: {', '.join(ALLOWED_MODELS)}"
+        )
+    if _is_groq(model_id):
+        if not settings.groq_api_key:
+            raise ValueError(
+                f"GROQ_API_KEY is not set. Add it to .env to use {model_id!r}."
+            )
+        return OpenAIProvider(
+            model_id=model_id,
+            api_key=settings.groq_api_key,
+            base_url=settings.groq_base_url,
         )
     return OpenAIProvider(model_id=model_id)
 

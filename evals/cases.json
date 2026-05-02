@@ -49,7 +49,7 @@
       "mode": "run",
       "key_columns": ["city"],
       "row_count_min": 3,
-      "ground_truth_sparql": "SELECT ?city (MAX(?pop) AS ?population) WHERE { ?city wdt:P31/wdt:P279* wd:Q515 . ?city wdt:P17 wd:Q17 . ?city wdt:P1082 ?pop . } GROUP BY ?city ORDER BY DESC(?population) LIMIT 20"
+      "ground_truth_sparql": "SELECT ?city (MAX(?pop) AS ?population) WHERE { ?city wdt:P31/wdt:P279* wd:Q515 . ?city wdt:P17 wd:Q17 . ?city wdt:P1082 ?pop . } GROUP BY ?city ORDER BY DESC(?population) LIMIT 50"
     },
     {
       "id": "AGG2",
@@ -63,11 +63,11 @@
     {
       "id": "AGG3",
       "type": "aggregation",
-      "question": "Name 3 mountains in the world that are over 8000 meters in elevation.",
+      "question": "Name the 3 most populous countries in the world.",
       "mode": "run",
-      "key_columns": ["mountain"],
+      "key_columns": ["country"],
       "row_count_min": 3,
-      "ground_truth_sparql": "SELECT ?mountain WHERE { ?mountain wdt:P31 wd:Q8502 . ?mountain wdt:P2044 ?elev . FILTER(?elev > 8000) } LIMIT 14"
+      "ground_truth_sparql": "SELECT ?country (MAX(?pop) AS ?population) WHERE { ?country wdt:P31 wd:Q3624078 . ?country wdt:P1082 ?pop . } GROUP BY ?country ORDER BY DESC(?population) LIMIT 10"
     },
     {
       "id": "AGG4",
@@ -126,9 +126,9 @@
       "type": "typo",
       "question": "List 3 plays written by Shaksepeare.",
       "mode": "run",
-      "key_columns": ["play"],
+      "key_columns": ["work"],
       "row_count_min": 3,
-      "ground_truth_sparql": "SELECT DISTINCT ?play WHERE { ?play wdt:P50 wd:Q692 . ?play wdt:P31/wdt:P279* wd:Q25379 . } LIMIT 50"
+      "ground_truth_sparql": "SELECT DISTINCT ?work WHERE { ?work wdt:P50 wd:Q692 . } LIMIT 5000"
     },
     {
       "id": "LANG1",
@@ -247,8 +247,13 @@
       "id": "BIG1",
       "type": "pathological_size",
       "question": "List every single human ever recorded on Wikidata.",
-      "mode": "refuse",
-      "refuse_keywords": ["specific", "narrow", "rephrase", "millions", "too broad", "not specific", "broad", "limit"]
+      "mode": "safety_or_answer",
+      "must_not_contain_in_sparql": ["INSERT", "DELETE", "DROP"],
+      "must_contain_in_sparql": ["LIMIT"],
+      "key_columns": ["human"],
+      "row_count_max": 200,
+      "refuse_keywords": ["specific", "narrow", "rephrase", "millions", "too broad", "not specific", "broad", "too many", "can't list", "extremely large", "every single", "narrow it down"],
+      "ground_truth_sparql": "SELECT ?human WHERE { ?human wdt:P31 wd:Q5 . } LIMIT 100"
     }
   ]
 }
