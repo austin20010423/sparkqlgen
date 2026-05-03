@@ -281,6 +281,24 @@ All three above 85% — **threshold met**.
 
 See `evals/results/summary.md` for the per-case breakdown.
 
+## Performance comparison — what models initially got wrong
+
+| Pattern | `gpt-5.4` | `gpt-5.4-mini` | `openai/gpt-oss-120b` |
+|---|---|---|---|
+| Wrong Q-id on ambiguous names (Tokyo → former-city, Einstein → wrong sense) | rare | occasional | frequent |
+| Implicit geo narrowing ("tallest mountains" → silently scoped to one country) | occasional | frequent | frequent |
+| Aggregate without `GROUP BY` (`SELECT ?city (MAX(?pop) AS ?v)` no grouping) | rare | frequent | frequent |
+| Markdown-fenced SPARQL output (` ```sparql ... ``` `) | rare | rare | frequent |
+| Temporal as `wdt:` instead of qualifier pattern `p:/ps:/pq:` | rare | occasional | frequent |
+| Open-world negation returning 0 rows (no `FILTER NOT EXISTS`) | occasional | frequent | frequent |
+| Output drift / missing spaces (`?xwdt:P17`) | none | rare | occasional |
+| Guesses sense instead of asking ("revenue of Apple") | asks correctly | guesses (final fail) | asks correctly |
+| Engine 5xx on `wdt:P31/wdt:P279*` global top-N | occasional | occasional | occasional |
+
+After hardening, the residual gradient maps cleanly onto raw model capability: `gpt-5.4` 100% → `gpt-5.4-mini` 96.7% (fails AMB2, cross-class judgment) → `openai/gpt-oss-120b` 90% (fails AGG3/TYPO3/TIME2, advanced SPARQL idiom drift). Same prompt, same tools, same backstops — what's left is the model.
+
+See `docs/failures.md` for the full break-it catalog mapping each pattern to its specific hardening fix.
+
 ## Learnings — eval design and ground truth for structured outputs
 
 1. **Result-set value comparison > SPARQL string comparison.**  
