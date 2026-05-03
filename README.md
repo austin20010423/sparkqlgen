@@ -9,7 +9,7 @@ property search → query → execute), and returns results.
 This repo also contains a 30-case multi-model evaluation pipeline
 (`evals/run.py`) used to certify that the agent passes ≥85% on three
 representative LLMs (closed-source flagship + closed-source small +
-open-weight 120B) — see [Part 2](#part-2--multi-model-evaluation) below.
+open-weight 120B).
 
 ---
 
